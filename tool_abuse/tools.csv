@@ -1,0 +1,5 @@
+id,name,category,description,is_outbound,is_query,created_at
+1,send_email,outbound,Sends emails to any address,t,f,2026-03-19 14:37:37.77809
+2,query_db,query,Queries internal database,f,t,2026-03-19 14:37:37.77809
+3,web_search,query,Fetches content from URLs,f,t,2026-03-19 14:37:37.77809
+4,read_file,query,Reads files from the filesystem,f,t,2026-03-19 14:37:37.77809

@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tool Abuse Intelligence Dashboard</title>
+    <meta name="description" content="Prompt Injection Red Teaming - Tool Abuse Analytics Dashboard">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="dashboard_data.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #0f0f1a;
+            --bg-card: linear-gradient(135deg, #0f0f1a 0%, #141428 100%);
+            --border: #1e1e3a;
+            --text-primary: #e2e2e2;
+            --text-secondary: #a0a0c0;
+            --text-muted: #6e6e9e;
+            --accent-purple: #7c3aed;
+            --accent-pink: #e040fb;
+            --accent-cyan: #06b6d4;
+            --critical: #ff4444;
+            --high: #ff9944;
+            --medium: #ffdd44;
+            --low: #44ff88;
+            --success: #22c55e;
+            --fail: #ef4444;
+            --none-color: #6e6e9e;
+            --font-display: 'Syne', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .title-bar {
+            background: linear-gradient(90deg, #1a0a2e 0%, #0a0a1e 100%);
+            border-bottom: 1px solid #2e1e4e;
+            padding: 24px 32px 20px;
+        }
+        .title-bar h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -1px; color: #fff; }
+        .title-bar p { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin-top: 4px; }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 24px 32px; }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; text-align: center; }
+        .kpi-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+        .kpi-value { font-family: var(--font-display); font-size: 2rem; font-weight: 800; color: var(--accent-pink); }
+
+        .tab-bar { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+        .tab-btn { font-family: var(--font-mono); font-size: 13px; padding: 10px 22px; border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; background: var(--bg-secondary); color: var(--text-muted); transition: all 0.2s; }
+        .tab-btn:hover { color: var(--text-primary); background: #141428; }
+        .tab-btn.active { background: #1a0a2e; border-color: var(--accent-purple); color: var(--accent-pink); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+        .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; }
+        .chart-card h3 { font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-bottom: 16px; }
+        .chart-wrap { position: relative; width: 100%; height: 300px; }
+        .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+        /* ── NEW: analytics section label ── */
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            margin-top: 8px;
+            padding-left: 4px;
+            border-left: 3px solid var(--accent-purple);
+            padding-left: 10px;
+        }
+
+        .table-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+        .table-controls input, .table-controls select { font-family: var(--font-mono); font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--text-primary); outline: none; }
+        .table-controls input:focus, .table-controls select:focus { border-color: var(--accent-purple); }
+        .table-controls input { min-width: 220px; }
+
+        table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
+        thead th { background: var(--bg-secondary); color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+        thead th:hover { color: var(--accent-pink); }
+        tbody td { padding: 10px 12px; border-bottom: 1px solid #12122a; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        tbody tr:hover { background: #12122a; }
+
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+        .pagination button { font-family: var(--font-mono); font-size: 12px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; cursor: pointer; transition: all 0.2s; }
+        .pagination button:hover { border-color: var(--accent-purple); color: var(--accent-pink); }
+        .pagination button:disabled { opacity: 0.3; cursor: default; }
+
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 10px; font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.5px; }
+        .badge-critical { background: #3d0000; color: #ff4444; border: 1px solid #ff4444; }
+        .badge-high     { background: #2d1a00; color: #ff9944; border: 1px solid #ff9944; }
+        .badge-medium   { background: #2d2d00; color: #ffdd44; border: 1px solid #ffdd44; }
+        .badge-low      { background: #002d00; color: #44ff88; border: 1px solid #44ff88; }
+        .badge-none     { background: #1a1a2e; color: #6e6e9e; border: 1px solid #6e6e9e; }
+        .badge-success  { background: #0d2d1a; color: #4ade80; border: 1px solid #22c55e; }
+        .badge-fail     { background: #2d0d0d; color: #f87171; border: 1px solid #ef4444; }
+        .badge-unknown  { background: #1a1a2e; color: #6e6e9e; border: 1px solid #6e6e9e; }
+
+        .detail-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+        .detail-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; cursor: pointer; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); transition: background 0.2s; }
+        .detail-header:hover { background: #141432; }
+        .detail-header .emoji { font-size: 16px; }
+        .detail-header .arrow { margin-left: auto; transition: transform 0.2s; color: var(--text-muted); }
+        .detail-header.open .arrow { transform: rotate(90deg); }
+        .detail-body { display: none; padding: 0 20px 20px; border-top: 1px solid var(--border); }
+        .detail-body.open { display: block; }
+        .detail-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 16px 0; }
+        .detail-meta-item { font-family: var(--font-mono); font-size: 11px; }
+        .detail-meta-item .label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .detail-meta-item .value { color: var(--accent-pink); font-weight: 700; margin-top: 2px; }
+        .detail-code { background: #08080e; border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; margin-top: 8px; }
+        .detail-code.payload { border-left: 3px solid #ff4444; color: #ffaaaa; }
+        .detail-code.response { border-left: 3px solid var(--success); color: #c0e0c0; }
+        .detail-code-label { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 14px; }
+
+        .download-btn { font-family: var(--font-mono); font-size: 12px; background: #1a0a2e; color: var(--accent-pink); border: 1px solid var(--accent-purple); border-radius: 8px; padding: 10px 20px; cursor: pointer; transition: all 0.2s; }
+        .download-btn:hover { background: var(--accent-purple); color: #fff; }
+
+        .divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+        .info-box { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; }
+        .footer { text-align: center; color: #3a3a5e; font-family: var(--font-mono); font-size: 11px; padding: 32px 0 24px; }
+        .sev-bar { height: 6px; border-radius: 3px; background: #1a1a2e; overflow: hidden; width: 60px; display: inline-block; vertical-align: middle; margin-left: 6px; }
+        .sev-bar-fill { height: 100%; border-radius: 3px; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+
+        @media (max-width: 900px) {
+            .chart-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="title-bar">
+    <h1>🛠️ Tool Abuse Intelligence Dashboard</h1>
+    <p>Prompt Injection Red Teaming · Tool Abuse Local Database Visualization</p>
+</div>
+
+<div class="container">
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="tab-bar" id="tabBar">
+        <button class="tab-btn active" data-tab="overview">📊 Overview Analytics</button>
+        <button class="tab-btn" data-tab="browser">📋 Prompt Browser</button>
+        <button class="tab-btn" data-tab="detail">🔬 Detail View</button>
+    </div>
+
+    <!-- TAB: OVERVIEW -->
+    <div class="tab-content active" id="tab-overview">
+
+        <!-- Row 1: existing charts -->
+        <div class="section-label">General Distribution</div>
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>Attack Vectors (Techniques)</h3>
+                <div class="chart-wrap"><canvas id="chartTechniqueBar"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>Target Tools</h3>
+                <div class="chart-wrap"><canvas id="chartToolTypes"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>Severity Score Distribution</h3>
+                <div class="chart-wrap"><canvas id="chartScoreHist"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>Execution Success Ratio</h3>
+                <div class="chart-wrap"><canvas id="chartResultPie"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Row 2: NEW analytics -->
+        <div class="section-label">Attack Effectiveness Analytics</div>
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>✅ Attack Success vs Failure — by Vector</h3>
+                <div class="chart-wrap"><canvas id="chartSuccessVsFail"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>🎯 Most Targeted Tools — Attacks & Success Rate</h3>
+                <div class="chart-wrap"><canvas id="chartToolTargeted"></canvas></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TAB: BROWSER -->
+    <div class="tab-content" id="tab-browser">
+        <div class="table-controls">
+            <input type="text" id="searchInput" placeholder="🔍 Search prompts, payloads...">
+            <select id="filterResult">
+                <option value="">All Results</option>
+                <option value="SUCCESS">SUCCESS</option>
+                <option value="FAILED">FAILED</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+            <select id="filterSeverity">
+                <option value="">All Severity</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="none">None</option>
+            </select>
+            <select id="filterToolType"></select>
+            <button class="download-btn" id="downloadBtn">⬇️ Download CSV</button>
+        </div>
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th data-sort="prompt_text">Full Prompt</th>
+                        <th data-sort="injected_payload">Payload</th>
+                        <th data-sort="attack_technique">Vector</th>
+                        <th data-sort="tool_call_type">Target Tool</th>
+                        <th data-sort="severity_score">Severity</th>
+                        <th data-sort="success_label">Result</th>
+                        <th data-sort="run_timestamp">Run Time</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- TAB: DETAIL -->
+    <div class="tab-content" id="tab-detail">
+        <h3 style="color: var(--text-secondary); margin-bottom: 8px;">Full Prompt + Payload View</h3>
+        <p style="color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin-bottom: 20px;">Click any row to expand the full prompt, payload, and LLM response.</p>
+        <div id="detailCards"></div>
+        <div class="pagination" id="detailPagination"></div>
+    </div>
+
+    <div class="footer">🛠️ Tool Abuse Intelligence Dashboard · Local Database Integrated</div>
+</div>
+
+<script>
+// =============================
+// GLOBALS
+// =============================
+let DATA = [];
+let FILTERED = [];
+let SORT_COL = 'severity_score';
+let SORT_ASC = false;
+let PAGE = 1;
+let PAGE_SIZE = 50;
+let DETAIL_PAGE = 1;
+let DETAIL_SIZE = 50;
+const CHART_COLORS = ['#7c3aed','#e040fb','#06b6d4','#f59e0b','#ef4444','#22c55e','#8b5cf6','#ec4899','#14b8a6','#f97316','#a855f7','#84cc16'];
+const SEV_COLORS = { critical:'#ff4444', high:'#ff9944', medium:'#ffdd44', low:'#44ff88', none:'#6e6e9e', unknown:'#444466' };
+const charts = {};
+
+// =============================
+// HELPERS
+// =============================
+function sevBand(s) {
+    if (s == null) return 'unknown';
+    if (s >= 0.9) return 'critical';
+    if (s >= 0.7) return 'high';
+    if (s >= 0.5) return 'medium';
+    if (s >= 0.3) return 'low';
+    return 'none';
+}
+function sevEmoji(b) { return {critical:'🔴',high:'🟠',medium:'🟡',low:'🟢',none:'⚪',unknown:'⚫'}[b]||'⚫'; }
+function badgeHTML(text, type) { if (!text) return '—'; return `<span class="badge badge-${type}">${text}</span>`; }
+function countBy(arr, key) { const m = {}; arr.forEach(r => { const v = r[key] || 'unknown'; m[v] = (m[v]||0)+1; }); return m; }
+function sortedEntries(obj, byVal=true) { const entries = Object.entries(obj); return byVal ? entries.sort((a,b)=>b[1]-a[1]) : entries.sort((a,b)=>a[0].localeCompare(b[0])); }
+function truncate(s, n) { return s && s.length > n ? s.slice(0,n)+'...' : (s||''); }
+function fmt(n, d=2) { return n != null ? Number(n).toFixed(d) : 'N/A'; }
+
+// =============================
+// DATA LOAD
+// =============================
+function loadData() {
+    try {
+        if (!window.DASHBOARD_DATA) throw new Error('window.DASHBOARD_DATA is undefined');
+        const json = window.DASHBOARD_DATA;
+        DATA = json.records.map(r => ({
+            ...r,
+            severity_band: sevBand(r.severity_score),
+            success_label: r.success_flag === true ? 'SUCCESS' : r.success_flag === false ? 'FAILED' : 'UNKNOWN'
+        }));
+        FILTERED = [...DATA];
+        initFilters();
+        renderAll();
+    } catch(e) {
+        document.querySelector('.container').innerHTML =
+            `<div class="info-box" style="margin-top:40px;">
+                <p>⚠️ Could not load data.</p>
+                <p style="margin-top:8px;">Run <code>python3 export_data.py</code> first to export local attack_prompts/attack_runs data to <code>dashboard_data.js</code>.</p>
+                <p style="margin-top:8px;font-size:11px;color:#555;">${e.message}</p>
+            </div>`;
+    }
+}
+
+// =============================
+// INIT FILTERS
+// =============================
+function initFilters() {
+    const tools = [...new Set(DATA.map(r=>r.tool_call_type).filter(Boolean))].sort();
+    const tsel = document.getElementById('filterToolType');
+    tsel.innerHTML = '<option value="">All Tools</option>' + tools.map(t=>`<option value="${t}">${t}</option>`).join('');
+}
+
+// =============================
+// FILTER + SORT
+// =============================
+function applyFilters() {
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    const result = document.getElementById('filterResult').value;
+    const sev    = document.getElementById('filterSeverity').value;
+    const tool   = document.getElementById('filterToolType').value;
+    FILTERED = DATA.filter(r => {
+        if (search && !((r.prompt_text||'').toLowerCase().includes(search) || (r.injected_payload||'').toLowerCase().includes(search) || (r.attack_technique||'').toLowerCase().includes(search))) return false;
+        if (result && r.success_label !== result) return false;
+        if (sev && r.severity_band !== sev) return false;
+        if (tool && r.tool_call_type !== tool) return false;
+        return true;
+    });
+    sortData(); PAGE = 1; DETAIL_PAGE = 1;
+    renderTable(); renderDetail();
+}
+
+function sortData() {
+    FILTERED.sort((a,b) => {
+        let va = a[SORT_COL], vb = b[SORT_COL];
+        if (va == null) va = SORT_ASC ? Infinity : -Infinity;
+        if (vb == null) vb = SORT_ASC ? Infinity : -Infinity;
+        if (typeof va === 'string') return SORT_ASC ? va.localeCompare(vb) : vb.localeCompare(va);
+        return SORT_ASC ? va - vb : vb - va;
+    });
+}
+
+// =============================
+// RENDER KPIs
+// =============================
+function renderKPIs() {
+    const total      = DATA.length;
+    const successes  = DATA.filter(r=>r.success_flag===true).length;
+    const evaluated  = DATA.filter(r=>r.eval_id!=null).length;
+    const rate       = evaluated>0 ? (successes/evaluated*100).toFixed(1) : '0.0';
+    const critical   = DATA.filter(r=>r.severity_band==='critical').length;
+    const falseCount = DATA.filter(r=>r.success_flag===false && r.eval_id!=null).length;
+    const tools      = countBy(DATA,'tool_call_type');
+    const topTool    = sortedEntries(tools).length>0 && sortedEntries(tools)[0][0]!=='unknown' ? sortedEntries(tools)[0][0] : 'None';
+
+    const kpis = [
+        ['Total Prompts',       total.toLocaleString()],
+        ['Executed Runs',       evaluated.toLocaleString()],
+        ['Successful Attacks',  successes.toLocaleString()],
+        ['Refused / Safe',      falseCount.toLocaleString()],
+        ['Success Rate',        rate+'%'],
+        ['Critical',            critical.toLocaleString()],
+        ['Top Targeted Tool',   topTool],
+    ];
+    document.getElementById('kpiGrid').innerHTML = kpis.map(([l,v]) =>
+        `<div class="kpi-card"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div></div>`
+    ).join('');
+}
+
+// =============================
+// CHART UTILS
+// =============================
+Chart.defaults.color = '#6e6e9e';
+Chart.defaults.borderColor = '#1e1e3a';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+
+function makeChart(id, config) {
+    if (charts[id]) charts[id].destroy();
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    charts[id] = new Chart(ctx, config);
+}
+
+// =============================
+// EXISTING CHARTS
+// =============================
+function renderOverviewCharts() {
+    const techCounts  = countBy(DATA, 'attack_technique');
+    const techEntries = sortedEntries(techCounts);
+    makeChart('chartTechniqueBar', {
+        type: 'bar',
+        data: { labels: techEntries.map(e=>e[0]), datasets: [{ data: techEntries.map(e=>e[1]), backgroundColor: CHART_COLORS, borderRadius: 4 }] },
+        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{color:'#1e1e3a'}}, y:{grid:{display:false}} } }
+    });
+
+    const toolCounts  = countBy(DATA, 'tool_call_type');
+    const toolEntries = sortedEntries(toolCounts);
+    makeChart('chartToolTypes', {
+        type: 'bar',
+        data: { labels: toolEntries.map(e=>e[0]), datasets: [{ data: toolEntries.map(e=>e[1]), backgroundColor: '#e040fb', borderRadius: 4 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{display:false}}, y:{grid:{color:'#1e1e3a'}, beginAtZero:true} } }
+    });
+
+    const bins = Array(20).fill(0);
+    DATA.filter(r=>r.severity_score!=null).forEach(r => { const idx = Math.min(Math.floor(r.severity_score*20),19); bins[idx]++; });
+    makeChart('chartScoreHist', {
+        type: 'bar',
+        data: { labels: bins.map((_,i)=>(i*0.05).toFixed(2)), datasets: [{ data: bins, backgroundColor: '#06b6d4', borderRadius: 2 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{display:false}}, y:{grid:{color:'#1e1e3a'}, beginAtZero:true} } }
+    });
+
+    const resCounts = countBy(DATA.filter(r=>r.eval_id), 'success_label');
+    const resColors = { SUCCESS:'#22c55e', FAILED:'#ef4444', UNKNOWN:'#6e6e9e' };
+    const resLabels = Object.keys(resCounts);
+    makeChart('chartResultPie', {
+        type: 'doughnut',
+        data: { labels: resLabels, datasets: [{ data: resLabels.map(l=>resCounts[l]), backgroundColor: resLabels.map(l=>resColors[l]||'#555'), borderWidth: 0 }] },
+        options: { responsive:true, maintainAspectRatio:false, cutout:'50%', plugins:{ legend:{ position:'right', labels:{ padding:16, usePointStyle:true } } } }
+    });
+}
+
+// =============================
+// NEW: SUCCESS VS FAIL BY VECTOR
+// =============================
+function renderSuccessVsFail() {
+    const vectors = [...new Set(DATA.map(r => r.attack_technique || 'unknown'))].filter(v => v && v !== 'unknown').sort();
+    const successCounts = {};
+    const failCounts    = {};
+    vectors.forEach(v => { successCounts[v] = 0; failCounts[v] = 0; });
+
+    DATA.forEach(r => {
+        const v = r.attack_technique || 'unknown';
+        if (!vectors.includes(v)) return;
+        if (r.success_label === 'SUCCESS') successCounts[v]++;
+        else failCounts[v]++;
+    });
+
+    makeChart('chartSuccessVsFail', {
+        type: 'bar',
+        data: {
+            labels: vectors,
+            datasets: [
+                { label: '✅ Success',      data: vectors.map(v=>successCounts[v]), backgroundColor: '#22c55e', borderRadius: 4 },
+                { label: '❌ Fail / Refused', data: vectors.map(v=>failCounts[v]),    backgroundColor: '#ef4444', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position:'top', labels:{ usePointStyle:true, padding:16 } },
+                tooltip: {
+                    callbacks: {
+                        afterBody: (items) => {
+                            const v   = items[0].label;
+                            const tot = (successCounts[v]||0) + (failCounts[v]||0);
+                            const pct = tot > 0 ? ((successCounts[v]||0)/tot*100).toFixed(1) : '0.0';
+                            return [`Success rate: ${pct}%`];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid:{ display:false } },
+                y: { grid:{ color:'#1e1e3a' }, beginAtZero:true }
+            }
+        }
+    });
+}
+
+// =============================
+// NEW: MOST TARGETED TOOLS
+// =============================
+function renderToolTargeted() {
+    const toolTotals    = {};
+    const toolSuccesses = {};
+    DATA.forEach(r => {
+        const tool = r.tool_call_type || 'unknown';
+        toolTotals[tool]    = (toolTotals[tool]    || 0) + 1;
+        if (r.success_label === 'SUCCESS') toolSuccesses[tool] = (toolSuccesses[tool] || 0) + 1;
+    });
+
+    const entries   = Object.entries(toolTotals).sort((a,b) => b[1]-a[1]);
+    const labels    = entries.map(e=>e[0]);
+    const totals    = entries.map(e=>e[1]);
+    const successes = entries.map(e=>toolSuccesses[e[0]]||0);
+    const rates     = totals.map((t,i) => t>0 ? +(successes[i]/t*100).toFixed(1) : 0);
+
+    makeChart('chartToolTargeted', {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Total Attacks',      data: totals,    backgroundColor: '#7c3aed', borderRadius:4, yAxisID:'yCount' },
+                { label: 'Successful Attacks', data: successes, backgroundColor: '#e040fb', borderRadius:4, yAxisID:'yCount' },
+                { label: 'Success Rate %', data: rates, type:'line', borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,0.1)',
+                  borderWidth:2, pointRadius:4, pointBackgroundColor:'#06b6d4', fill:false, yAxisID:'yRate', tension:0.3 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode:'index', intersect:false },
+            plugins: { legend: { position:'top', labels:{ usePointStyle:true, padding:14 } } },
+            scales: {
+                x:      { grid:{ display:false } },
+                yCount: { type:'linear', position:'left',  grid:{ color:'#1e1e3a' }, beginAtZero:true, title:{ display:true, text:'Attack Count', color:'#6e6e9e' } },
+                yRate:  { type:'linear', position:'right', grid:{ display:false }, min:0, max:100,
+                          title:{ display:true, text:'Success Rate %', color:'#06b6d4' }, ticks:{ color:'#06b6d4', callback: v=>v+'%' } }
+            }
+        }
+    });
+}
+
+// =============================
+// DETAIL CARD
+// =============================
+function buildDetailCard(r) {
+    const band   = r.severity_band;
+    const emoji  = sevEmoji(band);
+    const score  = fmt(r.severity_score);
+    const tech   = r.attack_technique || 'unknown';
+    const tool   = r.tool_call_type   || 'none';
+    const result = r.success_label;
+    const uid    = 'card-' + Math.random().toString(36).slice(2,10);
+
+    return `
+    <div class="detail-card">
+        <div class="detail-header" onclick="toggleDetail('${uid}')">
+            <span class="emoji">${emoji}</span>
+            <span>[${score}] ${tech} · tool=${tool} · </span>
+            ${badgeHTML(result, result==='SUCCESS'?'success':result==='FAILED'?'fail':'unknown')}
+            <span class="arrow">▶</span>
+        </div>
+        <div class="detail-body" id="${uid}">
+            <div class="detail-meta">
+                <div class="detail-meta-item"><div class="label">Severity</div><div class="value">${score}</div></div>
+                <div class="detail-meta-item"><div class="label">Band</div><div class="value">${band}</div></div>
+                <div class="detail-meta-item"><div class="label">Target Tool</div><div class="value">${tool}</div></div>
+                <div class="detail-meta-item"><div class="label">Vector</div><div class="value">${tech}</div></div>
+                <div class="detail-meta-item"><div class="label">Evaluated</div><div class="value">${r.eval_id?'Yes':'No'}</div></div>
+            </div>
+            <div class="detail-code-label">Full Compiled Prompt</div>
+            <div class="detail-code">${escapeHTML(r.prompt_text||'')}</div>
+            ${r.injected_payload ? `<div class="detail-code-label">Injected Payload Component</div><div class="detail-code payload">${escapeHTML(r.injected_payload)}</div>` : ''}
+            <div class="detail-code-label">LLM Run Response</div>
+            <div class="detail-code response">${escapeHTML(r.llm_output||'(No run associated yet)')}</div>
+        </div>
+    </div>`;
+}
+
+function escapeHTML(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function toggleDetail(id) { const el = document.getElementById(id); const h = el.previousElementSibling; el.classList.toggle('open'); h.classList.toggle('open'); }
+
+// =============================
+// RENDER TABLE
+// =============================
+function renderTable() {
+    const start    = (PAGE-1)*PAGE_SIZE;
+    const pageData = FILTERED.slice(start, start+PAGE_SIZE);
+    document.getElementById('tableBody').innerHTML = pageData.map(r => {
+        const band     = r.severity_band;
+        const sevColor = SEV_COLORS[band]||'#555';
+        const pct      = (r.severity_score||0)*100;
+        return `<tr>
+            <td title="${escapeHTML(r.prompt_text||'')}">${truncate(r.prompt_text,60)}</td>
+            <td title="${escapeHTML(r.injected_payload||'')}">${truncate(r.injected_payload,30)}</td>
+            <td>${r.attack_technique||'—'}</td>
+            <td>${r.tool_call_type||'—'}</td>
+            <td>${fmt(r.severity_score)} <span class="sev-bar"><span class="sev-bar-fill" style="width:${pct}%;background:${sevColor}"></span></span></td>
+            <td>${badgeHTML(r.success_label, r.success_label==='SUCCESS'?'success':r.success_label==='FAILED'?'fail':'unknown')}</td>
+            <td>${r.run_timestamp!=null&&r.run_timestamp!=='None'?escapeHTML(r.run_timestamp.split('.')[0]):'—'}</td>
+        </tr>`;
+    }).join('');
+
+    const totalPages = Math.max(1, Math.ceil(FILTERED.length/PAGE_SIZE));
+    document.getElementById('pagination').innerHTML = `
+        <button onclick="changePage(-1)" ${PAGE<=1?'disabled':''}>← Prev</button>
+        <span>Page ${PAGE} of ${totalPages} · ${FILTERED.length.toLocaleString()} results</span>
+        <button onclick="changePage(1)" ${PAGE>=totalPages?'disabled':''}>Next →</button>`;
+}
+
+function changePage(delta) { const t=Math.max(1,Math.ceil(FILTERED.length/PAGE_SIZE)); PAGE=Math.max(1,Math.min(t,PAGE+delta)); renderTable(); }
+
+// =============================
+// RENDER DETAIL
+// =============================
+function renderDetail() {
+    const start    = (DETAIL_PAGE-1)*DETAIL_SIZE;
+    const pageData = FILTERED.slice(start, start+DETAIL_SIZE);
+    document.getElementById('detailCards').innerHTML = pageData.map(r=>buildDetailCard(r)).join('');
+    const totalPages = Math.max(1,Math.ceil(FILTERED.length/DETAIL_SIZE));
+    document.getElementById('detailPagination').innerHTML = `
+        <button onclick="changeDetailPage(-1)" ${DETAIL_PAGE<=1?'disabled':''}>← Prev</button>
+        <span>Page ${DETAIL_PAGE} of ${totalPages}</span>
+        <button onclick="changeDetailPage(1)" ${DETAIL_PAGE>=totalPages?'disabled':''}>Next →</button>`;
+}
+function changeDetailPage(delta) { const t=Math.max(1,Math.ceil(FILTERED.length/DETAIL_SIZE)); DETAIL_PAGE=Math.max(1,Math.min(t,DETAIL_PAGE+delta)); renderDetail(); }
+
+// =============================
+// CSV DOWNLOAD
+// =============================
+function downloadCSV() {
+    const headers = ['prompt_id','prompt_text','injected_payload','attack_technique','tool_call_type','severity_score','success_label','llm_output','run_timestamp'];
+    const csvRows = [headers.join(',')];
+    FILTERED.forEach(r => { csvRows.push(headers.map(h => { let v=r[h]==null?'':String(r[h]); v=v.replace(/"/g,'""'); return `"${v}"`; }).join(',')); });
+    const blob = new Blob([csvRows.join('\n')],{type:'text/csv'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href=url; a.download='tool_abuse_filtered.csv'; a.click();
+    URL.revokeObjectURL(url);
+}
+
+// =============================
+// EVENT LISTENERS
+// =============================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+    });
+});
+
+['searchInput','filterResult','filterSeverity','filterToolType'].forEach(id => {
+    document.getElementById(id).addEventListener(id==='searchInput'?'input':'change', applyFilters);
+});
+
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        if (SORT_COL===col) { SORT_ASC=!SORT_ASC; } else { SORT_COL=col; SORT_ASC=false; }
+        sortData(); PAGE=1; renderTable();
+    });
+});
+
+document.getElementById('downloadBtn').addEventListener('click', downloadCSV);
+
+// =============================
+// RENDER ALL
+// =============================
+function renderAll() {
+    renderKPIs();
+    renderOverviewCharts();
+    renderSuccessVsFail();
+    renderToolTargeted();
+    renderTable();
+    renderDetail();
+}
+
+loadData();
+</script>
+</body>
+</html>
