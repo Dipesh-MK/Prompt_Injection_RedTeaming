@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RedTeamForge | Autonomous LLM Red Teaming</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <!-- Background Elements for Glassmorphism Context -->
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-orb orb-3"></div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar glass-panel">
+            <div class="brand">
+                <div class="logo-icon"></div>
+                <h1>RedTeam<span>Forge</span></h1>
+            </div>
+            
+            <nav class="main-nav">
+                <a href="#" class="nav-item active"><i class="icon">🎯</i> Active Session</a>
+                <a href="#" class="nav-item"><i class="icon">🧬</i> Mutation Engine</a>
+                <a href="#" class="nav-item"><i class="icon">📊</i> Analytics Report</a>
+            </nav>
+
+            <div class="status-indicator">
+                <span class="pulse-dot"></span> System Online
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Configuration Top Bar -->
+            <header class="config-bar glass-panel">
+                <div class="config-group target-scope-group">
+                    <label>Target Scope / System Context</label>
+                    <textarea id="targetScope">This is an internal enterprise AI assistant for ACME Corp...</textarea>
+                </div>
+                <div class="config-group">
+                    <label>Webhook Endpoint (Optional)</label>
+                    <input type="text" id="targetEndpoint" value="http://localhost:8080/api/chat" placeholder="http://..." />
+                </div>
+                <button id="startBtn" class="btn-primary">Launch Red Team</button>
+            </header>
+
+            <!-- Live Dashboard -->
+            <div class="dashboard-grid">
+                
+                <!-- Metrics Panel -->
+                <div class="metrics-panel glass-panel">
+                    <h2>Live Metrics</h2>
+                    <div class="metrics-container">
+                        <div class="metric-card">
+                            <span class="metric-value label-probes">0</span>
+                            <span class="metric-label">Probes Fired</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-value label-coverage">0%</span>
+                            <span class="metric-label">Criteria Covered</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Insights Panel -->
+                <div class="insights-panel glass-panel">
+                    <h2>Vulnerability Insights</h2>
+                    <div class="insight-lists">
+                        <div class="insight-column">
+                            <h3>Identified Weaknesses</h3>
+                            <ul id="weakAreasList" class="tag-list">
+                                <li class="empty-state">Awaiting data...</li>
+                            </ul>
+                        </div>
+                        <div class="insight-column">
+                            <h3>Strong Resistances</h3>
+                            <ul id="strongAreasList" class="tag-list">
+                                <li class="empty-state">Awaiting data...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Feed Panel -->
+                <div class="feed-panel glass-panel">
+                    <div class="feed-header">
+                        <h2>Live Attack Feed</h2>
+                        <div class="feed-status" id="feedStatus">Idle</div>
+                    </div>
+                    <div class="feed-container" id="feedContainer">
+                        <div class="empty-feed">
+                            <p>Configure scope and launch session to observe autonomous attacks.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+    </div>
+</body>
+</html>
