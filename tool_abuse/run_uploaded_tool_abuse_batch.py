@@ -9,10 +9,12 @@ from typing import Any
 
 from live_tool_abuse_lab import (
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_OLLAMA_MODEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_TOOL_GUARD,
     FakeToolAbuseLab,
     GeminiGenerateContentClient,
+    OllamaChatClient,
     OpenAIChatCompletionsClient,
     load_env_file,
     parse_uploaded_prompts,
@@ -164,11 +166,11 @@ def write_dashboard(records: list[dict[str, Any]], js_path: Path, json_path: Pat
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the uploaded tool-abuse CSV prompts against a live OpenAI model and refresh the dashboard.")
+    parser = argparse.ArgumentParser(description="Run the uploaded tool-abuse CSV prompts against a live model and refresh the dashboard.")
     parser.add_argument("--db-csv", default=str(DEFAULT_DB_CSV))
     parser.add_argument("--prompts-csv", default=str(DEFAULT_PROMPTS_CSV))
-    parser.add_argument("--provider", choices=["gemini", "openai"], default="gemini")
-    parser.add_argument("--model", default=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL))
+    parser.add_argument("--provider", choices=["gemini", "openai", "ollama"], default="ollama")
+    parser.add_argument("--model", default=os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL))
     parser.add_argument("--tool-guard", choices=["strict", "observe", "off"], default=DEFAULT_TOOL_GUARD)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--env-file", default=str(BASE_DIR.parent / ".env"))
@@ -189,7 +191,7 @@ def main() -> None:
             max_retries=args.client_max_retries,
             initial_backoff_sec=args.client_initial_backoff,
         )
-    else:
+    elif args.provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         client = OpenAIChatCompletionsClient(
             api_key=api_key or "",
@@ -197,8 +199,15 @@ def main() -> None:
             max_retries=args.client_max_retries,
             initial_backoff_sec=args.client_initial_backoff,
         )
+    else:
+        api_key = "local"
+        client = OllamaChatClient(
+            model_name=args.model,
+            max_retries=args.client_max_retries,
+            initial_backoff_sec=args.client_initial_backoff,
+        )
 
-    if not api_key:
+    if args.provider in {"gemini", "openai"} and not api_key:
         raise RuntimeError(
             f"{args.provider.upper()} API key is not set. Add it to your environment or .env, then rerun."
         )

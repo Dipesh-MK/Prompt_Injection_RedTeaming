@@ -23,6 +23,8 @@ DEFAULT_GEMINI_BASE_URL = os.getenv(
     "GEMINI_BASE_URL",
     "https://generativelanguage.googleapis.com/v1beta",
 )
+DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+DEFAULT_OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_TOOL_GUARD = os.getenv("TOOL_ABUSE_TOOL_GUARD", "observe")
 
 SYSTEM_PROMPT = """You are ACME's cautious internal assistant.
@@ -857,13 +859,153 @@ class GeminiGenerateContentClient:
         return f"Gemini API error {response.status_code}: {self._extract_error_text(response)}"
 
 
+class OllamaChatClient:
+    def __init__(
+        self,
+        model_name: str = DEFAULT_OLLAMA_MODEL,
+        base_url: str = DEFAULT_OLLAMA_BASE_URL,
+        timeout_sec: int = 120,
+        max_retries: int = 6,
+        initial_backoff_sec: float = 2.0,
+    ):
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self.timeout_sec = timeout_sec
+        self.max_retries = max_retries
+        self.initial_backoff_sec = initial_backoff_sec
+
+    def run_prompt(
+        self,
+        prompt_text: str,
+        lab: FakeToolAbuseLab,
+        max_steps: int = 8,
+    ) -> LabResult:
+        started = time.time()
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt_text},
+        ]
+        final_text = ""
+
+        for _ in range(max_steps):
+            response = self._post_chat(messages, lab.available_tools())
+            payload = response.json()
+            message = payload.get("message") or {}
+            content = message.get("content") or ""
+            tool_calls = message.get("tool_calls") or []
+
+            if tool_calls:
+                assistant_message = {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": tool_calls,
+                }
+                if message.get("thinking"):
+                    assistant_message["thinking"] = message["thinking"]
+                messages.append(assistant_message)
+
+                for call in tool_calls:
+                    function = call.get("function") or {}
+                    arguments = function.get("arguments") or {}
+                    tool_name = function.get("name", "")
+                    tool_output = lab.call_tool(tool_name, arguments)
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": tool_name,
+                            "content": json.dumps(tool_output, ensure_ascii=False),
+                        }
+                    )
+                continue
+
+            final_text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+            break
+
+        return LabResult(
+            final_text=final_text,
+            model_name=self.model_name,
+            tool_events=list(lab.tool_events),
+            raw_messages=messages,
+            latency_sec=round(time.time() - started, 3),
+        )
+
+    def _post_chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> requests.Response:
+        last_error: Optional[Exception] = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "model": self.model_name,
+                        "messages": messages,
+                        "tools": tools,
+                        "stream": False,
+                    },
+                    timeout=self.timeout_sec,
+                )
+
+                if response.status_code in {429, 500, 502, 503, 504} and attempt < self.max_retries:
+                    sleep_for = self._compute_backoff(attempt, response.headers.get("retry-after"))
+                    print(
+                        f"  Ollama retry {attempt + 1}/{self.max_retries} after HTTP {response.status_code}: "
+                        f"{self._extract_error_text(response)[:180]} | sleeping {sleep_for:.1f}s"
+                    )
+                    time.sleep(sleep_for)
+                    continue
+
+                response.raise_for_status()
+                return response
+
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    break
+                sleep_for = self._compute_backoff(attempt, None)
+                print(
+                    f"  Ollama retry {attempt + 1}/{self.max_retries} after network error: "
+                    f"{exc} | sleeping {sleep_for:.1f}s"
+                )
+                time.sleep(sleep_for)
+            except HTTPError as exc:
+                last_error = exc
+                raise RuntimeError(self._format_http_error(exc.response)) from exc
+
+        raise RuntimeError(f"Ollama request failed after retries: {last_error}")
+
+    def _compute_backoff(self, attempt: int, retry_after: Optional[str]) -> float:
+        if retry_after:
+            try:
+                return max(float(retry_after), 1.0)
+            except ValueError:
+                pass
+        return min(self.initial_backoff_sec * (2 ** attempt), 60.0)
+
+    def _extract_error_text(self, response: requests.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            return response.text.strip() or "unknown error"
+        return str(payload)
+
+    def _format_http_error(self, response: Optional[requests.Response]) -> str:
+        if response is None:
+            return "Ollama request failed with no response."
+        return f"Ollama API error {response.status_code}: {self._extract_error_text(response)}"
+
+
 def run_single_prompt(
     db_csv_path: Path,
     prompt_text: str,
-    model_name: str = DEFAULT_GEMINI_MODEL,
+    model_name: str = DEFAULT_OLLAMA_MODEL,
     tool_guard: str = DEFAULT_TOOL_GUARD,
     env_file: Optional[Path] = None,
-    provider: str = "gemini",
+    provider: str = "ollama",
 ) -> LabResult:
     if env_file:
         load_env_file(env_file)
@@ -874,14 +1016,19 @@ def run_single_prompt(
             api_key=api_key or "",
             model_name=model_name,
         )
-    else:
+    elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         client = OpenAIChatCompletionsClient(
             api_key=api_key or "",
             model_name=model_name,
         )
+    else:
+        api_key = "local"
+        client = OllamaChatClient(
+            model_name=model_name,
+        )
 
-    if not api_key:
+    if provider in {"gemini", "openai"} and not api_key:
         raise RuntimeError(f"{provider.upper()} API key is not set.")
 
     lab = FakeToolAbuseLab(db_csv_path=db_csv_path, tool_guard=tool_guard)
@@ -913,8 +1060,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run one tool-abuse prompt against a real LLM with a fake employee DB.")
     parser.add_argument("--db-csv", default="tool_abuse/DB-Tool_abuse.csv")
     parser.add_argument("--prompt", required=True)
-    parser.add_argument("--provider", choices=["gemini", "openai"], default="gemini")
-    parser.add_argument("--model", default=DEFAULT_GEMINI_MODEL)
+    parser.add_argument("--provider", choices=["gemini", "openai", "ollama"], default="ollama")
+    parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL)
     parser.add_argument("--tool-guard", choices=["strict", "observe", "off"], default=DEFAULT_TOOL_GUARD)
     parser.add_argument("--env-file", default=".env")
     args = parser.parse_args()
