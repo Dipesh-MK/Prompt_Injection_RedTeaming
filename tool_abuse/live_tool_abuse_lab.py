@@ -1006,6 +1006,7 @@ def run_single_prompt(
     tool_guard: str = DEFAULT_TOOL_GUARD,
     env_file: Optional[Path] = None,
     provider: str = "ollama",
+    ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL,
 ) -> LabResult:
     if env_file:
         load_env_file(env_file)
@@ -1026,6 +1027,7 @@ def run_single_prompt(
         api_key = "local"
         client = OllamaChatClient(
             model_name=model_name,
+            base_url=ollama_base_url,
         )
 
     if provider in {"gemini", "openai"} and not api_key:
@@ -1062,6 +1064,7 @@ def main() -> None:
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--provider", choices=["gemini", "openai", "ollama"], default="ollama")
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL)
+    parser.add_argument("--ollama-base-url", default=DEFAULT_OLLAMA_BASE_URL)
     parser.add_argument("--tool-guard", choices=["strict", "observe", "off"], default=DEFAULT_TOOL_GUARD)
     parser.add_argument("--env-file", default=".env")
     args = parser.parse_args()
@@ -1073,6 +1076,7 @@ def main() -> None:
         tool_guard=args.tool_guard,
         env_file=Path(args.env_file),
         provider=args.provider,
+        ollama_base_url=args.ollama_base_url,
     )
     print(format_result(result))
 
