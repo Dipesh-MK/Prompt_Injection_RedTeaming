@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from live_tool_abuse_lab import (
-    DEFAULT_GEMINI_MODEL,
-    DEFAULT_OPENAI_MODEL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_TOOL_GUARD,
     FakeToolAbuseLab,
     GeminiGenerateContentClient,
+    OllamaChatClient,
     OpenAIChatCompletionsClient,
     load_env_file,
     parse_uploaded_prompts,
@@ -25,6 +26,7 @@ DEFAULT_PROMPTS_CSV = BASE_DIR / "Prompts-Tool_Abuse.csv"
 DEFAULT_DASHBOARD_JS = BASE_DIR / "dashboard_data.js"
 DEFAULT_DASHBOARD_JSON = BASE_DIR / "dashboard_data.json"
 DEFAULT_RESULTS_JSON = BASE_DIR / "tool_abuse_live_results.json"
+DEFAULT_EVALUATOR_VERSION = "v1_tool_abuse_live_lab"
 
 ATTACK_TECHNIQUE_MAP = {
     "Indirect Injection": "indirect_injection",
@@ -101,7 +103,7 @@ def score_result(prompt: dict[str, str], result) -> dict[str, Any]:
         "severity_score": round(severity, 3),
         "confidence": round(min(confidence, 0.99), 2),
         "tool_call_type": tool_call_type,
-        "evaluator_version": "v1_openai_live_lab",
+        "evaluator_version": DEFAULT_EVALUATOR_VERSION,
         "tool_trace": result.to_trace_text(),
     }
 
@@ -145,7 +147,7 @@ def build_error_record(prompt: dict[str, str], model_name: str, error_message: s
         "run_timestamp": timestamp,
         "confidence": 1.0,
         "inference_time_sec": None,
-        "evaluator_version": "v1_openai_live_lab",
+        "evaluator_version": DEFAULT_EVALUATOR_VERSION,
         "tool_trace": "",
     }
 
@@ -164,11 +166,14 @@ def write_dashboard(records: list[dict[str, Any]], js_path: Path, json_path: Pat
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the uploaded tool-abuse CSV prompts against a live OpenAI model and refresh the dashboard.")
+    parser = argparse.ArgumentParser(
+        description="Run the uploaded tool-abuse CSV prompts against a live model and refresh the dashboard."
+    )
     parser.add_argument("--db-csv", default=str(DEFAULT_DB_CSV))
     parser.add_argument("--prompts-csv", default=str(DEFAULT_PROMPTS_CSV))
-    parser.add_argument("--provider", choices=["gemini", "openai"], default="gemini")
-    parser.add_argument("--model", default=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL))
+    parser.add_argument("--provider", choices=["gemini", "openai", "ollama"], default="ollama")
+    parser.add_argument("--model", default=os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL))
+    parser.add_argument("--ollama-base-url", default=os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL))
     parser.add_argument("--tool-guard", choices=["strict", "observe", "off"], default=DEFAULT_TOOL_GUARD)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--env-file", default=str(BASE_DIR.parent / ".env"))
@@ -189,7 +194,7 @@ def main() -> None:
             max_retries=args.client_max_retries,
             initial_backoff_sec=args.client_initial_backoff,
         )
-    else:
+    elif args.provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         client = OpenAIChatCompletionsClient(
             api_key=api_key or "",
@@ -197,8 +202,16 @@ def main() -> None:
             max_retries=args.client_max_retries,
             initial_backoff_sec=args.client_initial_backoff,
         )
+    else:
+        api_key = "local"
+        client = OllamaChatClient(
+            model_name=args.model,
+            base_url=args.ollama_base_url,
+            max_retries=args.client_max_retries,
+            initial_backoff_sec=args.client_initial_backoff,
+        )
 
-    if not api_key:
+    if args.provider in {"gemini", "openai"} and not api_key:
         raise RuntimeError(
             f"{args.provider.upper()} API key is not set. Add it to your environment or .env, then rerun."
         )
