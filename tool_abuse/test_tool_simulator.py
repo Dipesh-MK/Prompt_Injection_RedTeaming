@@ -1,6 +1,11 @@
 import unittest
+import sys
+import os
 
-from tool_abuse.tool_simulator import analyze_tool_abuse
+# Ensure tool_abuse directory is on path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from tool_simulator import analyze_tool_abuse
 
 
 class ToolSimulatorTests(unittest.TestCase):
