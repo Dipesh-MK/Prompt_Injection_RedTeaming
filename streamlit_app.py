@@ -719,12 +719,15 @@ if st.session_state.show_victim_modal:
         with btn_c2:
             if st.button("Test & Save", type="primary", use_container_width=True):
                 with st.spinner("Testing..."):
-                    client = VictimClient(m_url.strip(), m_model.strip() or None, m_key.strip() or None, int(m_to))
+                    u_val = (m_url or "").strip()
+                    mo_val = (m_model or "").strip() or None
+                    k_val = (m_key or "").strip() or None
+                    client = VictimClient(u_val, mo_val, k_val, int(m_to))
                     ok, lat, detail = client.test_connection()
                     if ok:
                         st.session_state.victim_verified = True
                         st.session_state.victim_latency = lat
-                        st.session_state.victim_cfg = {"webhook_url": m_url.strip(), "model_name": m_model.strip(), "api_key": m_key.strip(), "timeout": int(m_to)}
+                        st.session_state.victim_cfg = {"webhook_url": u_val, "model_name": mo_val, "api_key": k_val, "timeout": int(m_to)}
                         st.session_state.show_victim_modal = False
                         st.rerun()
                     else:
@@ -785,19 +788,19 @@ with tab_dash:
         st.markdown(f"#### {_mi('history', 'mi-blue')} Recent Activity", unsafe_allow_html=True)
         if st.session_state.probe_results:
             recent = st.session_state.probe_results[-8:][::-1]
-            for p in recent:
-                vuln_class = "vuln" if p["vuln"] else "safe"
-                icon = _mi("warning", "mi-red") if p["vuln"] else _mi("check_circle", "mi-green")
-                probe_snip = p["probe"][:90] + "..." if len(p["probe"]) > 90 else p["probe"]
-                sev_html   = severity_badge(p["severity"])
-                st.markdown(f"""
-                <div class="probe-row {vuln_class}">
-                    {icon} {sev_html} &nbsp; <span style="color:#1A1A2E;">{probe_snip}</span>
-                    <br><span style="color:#6B7280; font-size:0.77rem; margin-top:4px; display:block;">
-                        {_mi('label')} {p['weak_area']}  |  {p['insight'][:70]}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
+            for i, p in enumerate(recent, 1):
+                vuln_class = "🔴 Vuln" if p["vuln"] else "🟢 Safe"
+                with st.expander(f"Activity #{i} | {vuln_class} | {p['severity']} Sev"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("🔴 **Attacker Probe**")
+                        st.markdown(p["probe"])
+                        st.markdown("🟡 **Judge Evaluation**")
+                        st.markdown(f"**Weak Area:** {p['weak_area']}")
+                        st.markdown(p['insight'])
+                    with c2:
+                        st.markdown("🟢 **Victim Response**")
+                        st.markdown(p["response"])
         else:
             st.markdown(f"""
             <div class="rtf-card" style="text-align:center; padding: 2.5rem;">
@@ -872,12 +875,14 @@ with tab_victim:
         else:
             with col_status:
                 with st.spinner("Connecting..."):
-                    client = VictimClient(webhook_url.strip(), model_name.strip() or None, api_key.strip() or None, int(timeout))
+                    m_val = (model_name or "").strip() or None
+                    k_val = (api_key or "").strip() or None
+                    client = VictimClient((webhook_url or "").strip(), m_val, k_val, int(timeout))
                     ok, latency_ms, detail = client.test_connection()
             if ok:
                 st.session_state.victim_verified = True
                 st.session_state.victim_latency  = latency_ms
-                st.session_state.victim_cfg = {"webhook_url": webhook_url.strip(), "model_name": model_name.strip() or None, "api_key": api_key.strip() or None, "timeout": int(timeout)}
+                st.session_state.victim_cfg = {"webhook_url": (webhook_url or "").strip(), "model_name": m_val, "api_key": k_val, "timeout": int(timeout)}
                 st.success(f"Connection Verified! {detail}")
                 st.rerun()
             else:
@@ -1042,11 +1047,19 @@ with tab_probes:
 
         st.markdown("#### Probe Results")
         if st.session_state.probe_results:
-            rows = []
             for i, p in enumerate(reversed(st.session_state.probe_results), 1):
-                rows.append({"#": len(st.session_state.probe_results) - i + 1, "Probe": p["probe"][:80], "Severity": p["severity"], "Weak Area": p["weak_area"], "Vuln?": "YES" if p["vuln"] else "No"})
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+                idx = len(st.session_state.probe_results) - i + 1
+                vuln_txt = "🔴 YES" if p["vuln"] else "🟢 No"
+                with st.expander(f"Probe #{idx} | Vuln: {vuln_txt} | Severity: {p['severity']} | Category: {p['weak_area']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("🔴 **Attacker Probe**")
+                        st.markdown(p["probe"])
+                        st.markdown("🟡 **Judge Logic**")
+                        st.markdown(p["insight"])
+                    with col2:
+                        st.markdown("🟢 **Victim Response**")
+                        st.markdown(p["response"])
         else:
             st.markdown('<div class="rtf-card" style="text-align:center; padding:2rem;"><div style="color:#9CA3AF;">Results will appear here as probes are run.</div></div>', unsafe_allow_html=True)
 
@@ -1056,7 +1069,7 @@ with tab_probes:
                 for entry in reversed(st.session_state.conversation_log[-20:]):
                     role_icon = "🔴" if entry.get("role") == "attacker" else "🟢" if entry.get("role") == "victim" else "⚖️"
                     st.markdown(f"**{role_icon} {entry.get('role', 'unknown').title()}** — Turn {entry.get('turn', '?')}")
-                    st.text(entry.get("text", "")[:300])
+                    st.markdown(entry.get("text", ""))
                     if entry.get("judgment"):
                         j = entry["judgment"]
                         sev_txt = f"Severity: {j}" if isinstance(j, (int, float)) else str(j)[:100]
@@ -1251,13 +1264,14 @@ with tab_tool_abuse:
                     with st.expander(f"Finding #{i} | {r['category']} | Severity: {sev_pct}% | {r['vector']}"):
                         fc1, fc2 = st.columns([1, 1])
                         with fc1:
-                            st.markdown("**Attack Probe**")
-                            st.code(r["probe"], language=None)
+                            st.markdown("🔴 **Attack Probe (Attacker)**")
+                            st.markdown(r["probe"])
+                            st.markdown("🟡 **Finding Info:**")
+                            st.markdown(f"`{r['category']}` | Tools: `{r['tools']}`")
+                            st.markdown(f"{r['finding']}")
                         with fc2:
-                            st.markdown("**Finding**")
-                            st.markdown(f"**Category:** `{r['category']}`")
-                            st.markdown(f"**Tools Involved:** `{r['tools']}`")
-                            st.markdown(f"**Key Finding:** {r['finding']}")
+                            st.markdown("🟢 **Victim Response (Target)**")
+                            st.markdown(r["response"])
                         if r.get("tool_calls"):
                             st.markdown("**Tool Call Trace:**")
                             st.json(r["tool_calls"][:5])
@@ -1394,6 +1408,17 @@ with tab_execute:
                 st.markdown("#### Attack Execution Results")
                 df_rows = [{"#": i, "Prompt": r["prompt"][:70], "Vuln?": "YES" if r["vuln"] else "No", "Severity": r["severity"], "Weak Area": r["weak_area"]} for i, r in enumerate(st.session_state.attack_results, 1)]
                 st.dataframe(pd.DataFrame(df_rows), use_container_width=True, hide_index=True)
+                
+                st.markdown("#### Detailed Execution Log")
+                for i, r in enumerate(st.session_state.attack_results, 1):
+                    with st.expander(f"Execution #{i} | Vuln: {'YES' if r['vuln'] else 'No'}"):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown("**Attacker Prompt**")
+                            st.markdown(r["prompt"])
+                        with c2:
+                            st.markdown("**Victim Response**")
+                            st.markdown(r["response"])
 
 
 # ═════════════════════════════════════════════════════════════════════════════

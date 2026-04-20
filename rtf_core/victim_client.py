@@ -30,11 +30,13 @@ def _build_openai_payload(message: str, model: Optional[str]) -> dict:
 
 
 def _build_ollama_payload(message: str, model: Optional[str]) -> dict:
-    return {
-        "model": model or "llama2",
+    payload = {
         "prompt": message,
         "stream": False,
     }
+    if model:
+        payload["model"] = model
+    return payload
 
 
 def _extract_response_text(data: dict) -> str:

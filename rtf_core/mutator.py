@@ -46,7 +46,17 @@ def _parse_json_list(raw: str) -> list[str]:
             # Try strict parsing first
             try:
                 parsed = json.loads(raw[start:end])
-                return [str(x) for x in parsed if x]
+                results = []
+                for item in parsed:
+                    if isinstance(item, dict):
+                        val = item.get("probe") or item.get("prompt") or item.get("text") or item.get("input") 
+                        if val:
+                            results.append(str(val))
+                        else:
+                            results.append(" | ".join(str(v) for v in item.values() if isinstance(v, str)))
+                    elif isinstance(item, str):
+                        results.append(item)
+                return results
             except json.JSONDecodeError:
                 pass # Fall through to fallback
     except Exception:
@@ -62,12 +72,18 @@ def _parse_json_list(raw: str) -> list[str]:
     if start != -1:
         body = raw[start:]
         
-    pattern = r'"([^"\\]*(?:\\.[^"\\]*)*)"'
-    for match in re.finditer(pattern, body):
-        text = match.group(1).encode('utf-8', 'ignore').decode('unicode_escape', 'ignore')
-        # Filter out overly short strings and hallucinations about the prompt
-        if len(text) > 10 and "You are an advanced" not in text and "child probes" not in text:
-            results.append(text)
+    # Try robust object pattern first
+    pattern_obj = r'"(?:probe|prompt|text|input)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"'
+    for match in re.finditer(pattern_obj, body):
+        results.append(match.group(1).encode('utf-8', 'ignore').decode('unicode_escape', 'ignore'))
+        
+    if not results:
+        pattern = r'"([^"\\]*(?:\\.[^"\\]*)*)"'
+        for match in re.finditer(pattern, body):
+            text = match.group(1).encode('utf-8', 'ignore').decode('unicode_escape', 'ignore')
+            # Filter out overly short strings and hallucinations about the prompt
+            if len(text) > 10 and "You are an advanced" not in text and "child probes" not in text:
+                results.append(text)
     return results
 
 

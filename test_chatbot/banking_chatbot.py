@@ -350,7 +350,9 @@ def call_ollama_chat(
 
         try:
             resp = http_requests.post(chat_url, json=payload, timeout=120)
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                raw_err = resp.text
+                return f"[LLM Error: HTTP {resp.status_code}: {raw_err}]", tool_log
             data = resp.json()
         except Exception as exc:
             return f"[LLM Error: {exc}]", tool_log

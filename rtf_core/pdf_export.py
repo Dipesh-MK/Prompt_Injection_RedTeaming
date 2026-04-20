@@ -174,21 +174,31 @@ def generate_pdf(report: dict) -> bytes:
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             # Probe
-            pdf.set_font("Helvetica", "I", 8)
-            pdf.set_text_color(*GRAY)
-            pdf.cell(15, 5, "Probe:", new_x=XPos.RIGHT, new_y=YPos.LAST)
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_text_color(*RED)
+            pdf.cell(15, 5, "Attacker:", new_x=XPos.RIGHT, new_y=YPos.LAST)
             pdf.set_font("Helvetica", "", 8)
             pdf.set_text_color(*DARK)
-            probe_snip = sanitize(v.get("probe", ""))[:120] + ("..." if len(v.get("probe","")) > 120 else "")
-            pdf.multi_cell(0, 5, probe_snip, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.multi_cell(0, 5, sanitize(v.get("probe", "")), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.ln(1)
 
-            # Insight
-            pdf.set_font("Helvetica", "I", 8)
-            pdf.set_text_color(*GRAY)
-            pdf.cell(15, 5, "Finding:", new_x=XPos.RIGHT, new_y=YPos.LAST)
+            # Response
+            if v.get("victim_response"):
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color(5, 150, 105) # Green
+                pdf.cell(15, 5, "Target:", new_x=XPos.RIGHT, new_y=YPos.LAST)
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(*DARK)
+                pdf.multi_cell(0, 5, sanitize(v.get("victim_response", "")), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.ln(1)
+
+            # Insight (Judge Justification)
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_text_color(217, 119, 6) # Yellow/Orange
+            pdf.cell(15, 5, "Judge:", new_x=XPos.RIGHT, new_y=YPos.LAST)
             pdf.set_font("Helvetica", "", 8)
             pdf.set_text_color(*DARK)
-            pdf.multi_cell(0, 5, sanitize(v.get("insight", ""))[:200], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.multi_cell(0, 5, sanitize(v.get("insight", "")), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Tools (if any)
             if v.get("type") == "tool_abuse" and v.get("tools") != "none":

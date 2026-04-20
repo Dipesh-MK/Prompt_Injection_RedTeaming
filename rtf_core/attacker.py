@@ -47,10 +47,37 @@ def _parse_json_list(raw: str) -> list[str]:
         end   = raw.rfind("]") + 1
         if start != -1 and end > start:
             parsed = json.loads(raw[start:end])
-            return [str(x) for x in parsed if x]
+            results = []
+            for item in parsed:
+                if isinstance(item, dict):
+                    # Extract the payload if LLM wrapped it in a dict
+                    val = item.get("probe") or item.get("prompt") or item.get("text") or item.get("input") 
+                    if val:
+                        results.append(str(val))
+                    else:
+                        results.append(" | ".join(str(v) for v in item.values() if isinstance(v, str)))
+                elif isinstance(item, str):
+                    results.append(item)
+            return results
     except Exception:
         pass
-    return []
+    
+    # Fallback regex
+    import re
+    results = []
+    body = raw[raw.find("["):] if raw.find("[") != -1 else raw
+    pattern = r'"(?:probe|prompt|text|input)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"'
+    for match in re.finditer(pattern, body):
+        results.append(match.group(1).encode('utf-8', 'ignore').decode('unicode_escape', 'ignore'))
+    
+    if not results:
+        pattern2 = r'"([^"\\]*(?:\\.[^"\\]*)*)"'
+        for match in re.finditer(pattern2, body):
+            text = match.group(1).encode('utf-8', 'ignore').decode('unicode_escape', 'ignore')
+            if len(text) > 15 and "You are an advanced" not in text:
+                results.append(text)
+                
+    return results
 
 
 def generate_probes(

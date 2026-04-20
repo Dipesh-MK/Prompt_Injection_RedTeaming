@@ -65,7 +65,7 @@ def build_report(session_id: str) -> dict:
         for p in vulnerabilities:
             unified_vulns.append({
                 "probe":       p.probe_text,
-                "response":    (p.victim_response or "")[:300],
+                "victim_response": (p.victim_response or ""),
                 "weak_area":   p.weak_area or "Unknown",
                 "insight":     p.key_insight or "",
                 "severity":    p.severity,
@@ -78,7 +78,7 @@ def build_report(session_id: str) -> dict:
             mapped_sev = _map_ta_sev(p.severity)
             unified_vulns.append({
                 "probe":       p.probe_text,
-                "response":    (p.victim_response or "")[:300],
+                "victim_response": (p.victim_response or ""),
                 "weak_area":   p.attack_category or "Tool Abuse",
                 "insight":     p.key_finding or "Tool abuse vulnerability discovered.",
                 "severity":    mapped_sev,
