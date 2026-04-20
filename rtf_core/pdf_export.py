@@ -14,6 +14,11 @@ import io
 import datetime
 from fpdf import FPDF, XPos, YPos
 
+def sanitize(text: str) -> str:
+    if not isinstance(text, str):
+        text = str(text)
+    return text.encode("latin-1", "ignore").decode("latin-1")
+
 
 # ── Colour palette ─────────────────────────────────────────────────────────────
 RED    = (230, 57,  70)
@@ -41,7 +46,7 @@ class RTFReport(FPDF):
         self.set_font("Helvetica", "B", 9)
         self.set_text_color(*WHITE)
         self.set_xy(10, 2)
-        self.cell(0, 8, "REDTEAMFORGE — CONFIDENTIAL SECURITY REPORT", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.cell(0, 8, "REDTEAMFORGE - CONFIDENTIAL SECURITY REPORT", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(6)
 
     def footer(self):
@@ -79,7 +84,7 @@ def generate_pdf(report: dict) -> bytes:
 
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*GRAY)
-    pdf.cell(0, 6, report.get("session_name", ""), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 6, sanitize(report.get("session_name", "")), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(4)
 
     # ── Risk Score banner ─────────────────────────────────────────────────────
@@ -100,7 +105,7 @@ def generate_pdf(report: dict) -> bytes:
     pdf.set_draw_color(*RED); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(2)
 
     details = [
-        ("Target Webhook",  report.get("webhook_url", "N/A")),
+        ("Target Webhook",  sanitize(report.get("webhook_url", "N/A"))),
         ("Total Probes",    str(total)),
         ("Vulnerabilities", f"{vuln_count} of {total} probes triggered a finding"),
         ("Session Start",   report.get("start_time", "")[:19].replace("T", "  ")),
@@ -142,7 +147,7 @@ def generate_pdf(report: dict) -> bytes:
         pdf.set_font("Helvetica", "", 9)
         for area, cnt in wa_freq.items():
             pdf.set_text_color(*DARK)
-            pdf.cell(150, 5, f"  • {area}", new_x=XPos.RIGHT, new_y=YPos.LAST)
+            pdf.cell(150, 5, f"  * {sanitize(area)}", new_x=XPos.RIGHT, new_y=YPos.LAST)
             pdf.set_text_color(*RED)
             pdf.cell(0, 5, f"{cnt} finding(s)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(4)
@@ -161,11 +166,11 @@ def generate_pdf(report: dict) -> bytes:
             pdf.set_fill_color(*sev_color)
             pdf.set_text_color(*WHITE)
             pdf.set_font("Helvetica", "B", 8)
-            pdf.cell(25, 5, v.get("sev_label", ""), fill=True, align="C",
+            pdf.cell(25, 5, sanitize(v.get("sev_label", "")), fill=True, align="C",
                      new_x=XPos.RIGHT, new_y=YPos.LAST)
             pdf.set_text_color(*DARK)
             pdf.set_font("Helvetica", "B", 9)
-            pdf.cell(0, 5, f"  #{i} — {v.get('weak_area', 'Unknown')}",
+            pdf.cell(0, 5, f"  #{i} - {sanitize(v.get('weak_area', 'Unknown'))}",
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             # Probe
@@ -174,7 +179,7 @@ def generate_pdf(report: dict) -> bytes:
             pdf.cell(15, 5, "Probe:", new_x=XPos.RIGHT, new_y=YPos.LAST)
             pdf.set_font("Helvetica", "", 8)
             pdf.set_text_color(*DARK)
-            probe_snip = v.get("probe", "")[:120] + ("…" if len(v.get("probe","")) > 120 else "")
+            probe_snip = sanitize(v.get("probe", ""))[:120] + ("..." if len(v.get("probe","")) > 120 else "")
             pdf.multi_cell(0, 5, probe_snip, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             # Insight
@@ -183,7 +188,7 @@ def generate_pdf(report: dict) -> bytes:
             pdf.cell(15, 5, "Finding:", new_x=XPos.RIGHT, new_y=YPos.LAST)
             pdf.set_font("Helvetica", "", 8)
             pdf.set_text_color(*DARK)
-            pdf.multi_cell(0, 5, v.get("insight", "")[:200], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.multi_cell(0, 5, sanitize(v.get("insight", ""))[:200], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Tools (if any)
             if v.get("type") == "tool_abuse" and v.get("tools") != "none":
@@ -192,7 +197,7 @@ def generate_pdf(report: dict) -> bytes:
                 pdf.cell(15, 5, "Tools:", new_x=XPos.RIGHT, new_y=YPos.LAST)
                 pdf.set_font("Helvetica", "B", 8)
                 pdf.set_text_color(*ORANGE)
-                pdf.multi_cell(0, 5, v.get("tools", ""), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.multi_cell(0, 5, sanitize(v.get("tools", "")), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             pdf.ln(2)
 
@@ -214,7 +219,7 @@ def generate_pdf(report: dict) -> bytes:
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*DARK)
     for r_text in recs:
-        pdf.cell(0, 6, f"  ✦  {r_text}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(0, 6, f"  *  {r_text}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # ── Footer note ───────────────────────────────────────────────────────────
     pdf.ln(8)

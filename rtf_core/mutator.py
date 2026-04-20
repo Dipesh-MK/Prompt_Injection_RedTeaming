@@ -38,15 +38,37 @@ def _call_ollama(prompt: str, model: str, temperature: float = 0.9) -> str:
 
 
 def _parse_json_list(raw: str) -> list[str]:
+    import re
     try:
         start = raw.find("[")
         end   = raw.rfind("]") + 1
         if start != -1 and end > start:
-            parsed = json.loads(raw[start:end])
-            return [str(x) for x in parsed if x]
+            # Try strict parsing first
+            try:
+                parsed = json.loads(raw[start:end])
+                return [str(x) for x in parsed if x]
+            except json.JSONDecodeError:
+                pass # Fall through to fallback
     except Exception:
         pass
-    return []
+    
+    # Fallback: regex to find strings matching array format
+    # This is highly effective for truncated LLM JSON arrays
+    results = []
+    
+    # Try to constrain to just the array body
+    body = raw
+    start = raw.find("[")
+    if start != -1:
+        body = raw[start:]
+        
+    pattern = r'"([^"\\]*(?:\\.[^"\\]*)*)"'
+    for match in re.finditer(pattern, body):
+        text = match.group(1).encode('utf-8', 'ignore').decode('unicode_escape', 'ignore')
+        # Filter out overly short strings and hallucinations about the prompt
+        if len(text) > 10 and "You are an advanced" not in text and "child probes" not in text:
+            results.append(text)
+    return results
 
 
 def get_parent_probes_from_db(session, limit: int = None) -> list[dict]:
@@ -136,7 +158,9 @@ Return ONLY a valid JSON array of strings. No markdown, no explanation."""
         raw    = _call_ollama(prompt, model, temperature=0.92)
         result = _parse_json_list(raw)
         if result:
-            return result
+            # Enforce the strict user boundary because smaller LLMs often ignore count instructions
+            # or the fallback regex picks up conversational quotes.
+            return result[-n:]
     except Exception as e:
         print(f"[Mutator] Error: {e}")
 
